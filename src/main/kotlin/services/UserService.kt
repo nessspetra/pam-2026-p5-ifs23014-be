@@ -7,6 +7,8 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.util.cio.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.delcom.data.AppException
 import org.delcom.data.AuthRequest
 import org.delcom.data.DataResponse
@@ -102,11 +104,13 @@ class UserService(
                     val fileName = UUID.randomUUID().toString() + ext
                     val filePath = "uploads/users/$fileName"
 
-                    val file = File(filePath)
-                    file.parentFile.mkdirs() // pastikan folder ada
+                    withContext(Dispatchers.IO) {
+                        val file = File(filePath)
+                        file.parentFile.mkdirs() // pastikan folder ada
 
-                    part.provider().copyAndClose(file.writeChannel())
-                    newPhoto = filePath
+                        part.provider().copyAndClose(file.writeChannel())
+                        newPhoto = filePath
+                    }
                 }
 
                 else -> {}
