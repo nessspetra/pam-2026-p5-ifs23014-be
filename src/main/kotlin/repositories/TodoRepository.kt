@@ -13,24 +13,34 @@ import org.jetbrains.exposed.sql.lowerCase
 import java.util.*
 
 class TodoRepository : ITodoRepository {
-    override suspend fun getAll(userId: String, search: String): List<Todo> = suspendTransaction {
-        if (search.isBlank()) {
-            TodoDAO
-                .find {
+    override suspend fun getAll(userId: String, search: String, page: Int, perPage: Int, isComplete: Boolean?): List<Todo> = suspendTransaction {
+        val query = if (search.isBlank()) {
+            TodoDAO.find {
+                if (isComplete != null) {
+                    (TodoTable.userId eq UUID.fromString(userId)) and (TodoTable.isDone eq isComplete)
+                } else {
                     (TodoTable.userId eq UUID.fromString(userId))
                 }
-                .orderBy(TodoTable.createdAt to SortOrder.DESC)
-                .map(::todoDAOToModel)
+            }.orderBy(TodoTable.createdAt to SortOrder.DESC)
         } else {
             val keyword = "%${search.lowercase()}%"
-
-            TodoDAO
-                .find {
-                    TodoTable.title.lowerCase() like keyword
+            TodoDAO.find {
+                var op: org.jetbrains.exposed.sql.Op<Boolean> = (TodoTable.userId eq UUID.fromString(userId)) and (TodoTable.title.lowerCase() like keyword)
+                if (isComplete != null) {
+                    op = op and (TodoTable.isDone eq isComplete)
                 }
-                .orderBy(TodoTable.title to SortOrder.ASC)
-                .map(::todoDAOToModel)
+                op
+            }.orderBy(TodoTable.title to SortOrder.ASC)
         }
+
+        query.limit(perPage).offset(((page - 1) * perPage).toLong()).map(::todoDAOToModel)    }
+
+    override suspend fun getHomeStats(userId: String): Map<String, Long> = suspendTransaction {
+        val total = TodoDAO.find { TodoTable.userId eq UUID.fromString(userId) }.count()
+        val completed = TodoDAO.find { (TodoTable.userId eq UUID.fromString(userId)) and (TodoTable.isDone eq true) }.count()
+        val active = total - completed
+
+        mapOf("total" to total, "complete" to completed, "active" to active)
     }
 
     override suspend fun getById(todoId: String): Todo? = suspendTransaction {

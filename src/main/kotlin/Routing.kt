@@ -1,5 +1,4 @@
 package org.delcom
-
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
 import io.ktor.server.auth.authenticate
@@ -50,7 +49,7 @@ fun Application.configureRouting() {
 
     routing {
         get("/") {
-            call.respondText("API telah berjalan. Dibuat oleh Gayus Jones.")
+            call.respondText("API telah berjalan. Dibuat oleh Gayus Jones .")
         }
 
         // Route Auth
@@ -89,6 +88,9 @@ fun Application.configureRouting() {
 
             // Route Todos
             route("/todos") {
+                get("/stats") {
+                    todoService.getStats(call)
+                }
                 get {
                     todoService.getAll(call)
                 }

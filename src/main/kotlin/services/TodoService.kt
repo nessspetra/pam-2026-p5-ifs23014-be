@@ -25,18 +25,40 @@ class TodoService(
     private val userRepo: IUserRepository,
     private val todoRepo: ITodoRepository
 ) {
-    // Mengambil semua daftar todo saya
     suspend fun getAll(call: ApplicationCall) {
         val user = ServiceHelper.getAuthUser(call, userRepo)
 
         val search = call.request.queryParameters["search"] ?: ""
 
-        val todos = todoRepo.getAll(user.id, search)
+        val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
+        val perPage = call.request.queryParameters["perPage"]?.toIntOrNull() ?: 10
+        val filter = call.request.queryParameters["filter"] // nilainya bisa: "complete" atau "active"
+
+        val isComplete = when(filter) {
+            "complete" -> true
+            "active" -> false
+            else -> null // jika "all" atau kosong
+        }
+
+        // Panggil fungsi getAll yang baru
+        val todos = todoRepo.getAll(user.id, search, page, perPage, isComplete)
 
         val response = DataResponse(
             "success",
             "Berhasil mengambil daftar todo saya",
             mapOf(Pair("todos", todos))
+        )
+        call.respond(response)
+    }
+
+    suspend fun getStats(call: ApplicationCall) {
+        val user = ServiceHelper.getAuthUser(call, userRepo)
+        val stats = todoRepo.getHomeStats(user.id)
+
+        val response = DataResponse(
+            "success",
+            "Berhasil mengambil statistik todo",
+            mapOf(Pair("stats", stats))
         )
         call.respond(response)
     }
