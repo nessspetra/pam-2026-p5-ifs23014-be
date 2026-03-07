@@ -1,6 +1,7 @@
+@file:Suppress("SpellCheckingInspection")
+
 package org.delcom.services
 
-import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -9,6 +10,7 @@ import io.ktor.util.cio.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 import org.delcom.data.AppException
 import org.delcom.data.AuthRequest
 import org.delcom.data.DataResponse
@@ -26,7 +28,6 @@ class UserService(
     private val userRepo: IUserRepository,
     private val refreshTokenRepo: IRefreshTokenRepository,
 ) {
-    // Mengambil data user yang login saat ini
     suspend fun getMe(call: ApplicationCall) {
         val user = ServiceHelper.getAuthUser(call, userRepo)
 
@@ -38,6 +39,7 @@ class UserService(
                     id = user.id,
                     name = user.name,
                     username = user.username,
+                    about = user.about,
                     createdAt = user.createdAt,
                     updatedAt = user.updatedAt,
                 ),
@@ -46,20 +48,16 @@ class UserService(
         call.respond(response)
     }
 
-    // Mengubah data saya
     suspend fun putMe(call: ApplicationCall) {
         val user = ServiceHelper.getAuthUser(call, userRepo)
 
-        // Ambil data request
         val request = call.receive<AuthRequest>()
 
-        // Validasi request
         val validator = ValidatorHelper(request.toMap())
         validator.required("name", "Nama tidak boleh kosong")
         validator.required("username", "Username tidak boleh kosong")
         validator.validate()
 
-        // periksa user dengan username
         val existUser = userRepo.getByUsername(request.username)
         if (existUser != null && existUser.username != user.username) {
             throw AppException(
@@ -70,6 +68,9 @@ class UserService(
 
         user.username = request.username
         user.name = request.name
+        user.about = request.about
+        user.updatedAt = Clock.System.now()
+
         val isUpdated = userRepo.update(
             user.id,
             user
@@ -86,7 +87,6 @@ class UserService(
         call.respond(response)
     }
 
-    // mengubah photo profile
     suspend fun putMyPhoto(call: ApplicationCall) {
         val user = ServiceHelper.getAuthUser(call, userRepo)
 
@@ -94,7 +94,6 @@ class UserService(
         val multipartData = call.receiveMultipart(formFieldLimit = 1024 * 1024 * 5)
         multipartData.forEachPart { part ->
             when (part) {
-                // Upload file
                 is PartData.FileItem -> {
                     val ext = part.originalFileName
                         ?.substringAfterLast('.', "")
@@ -106,16 +105,14 @@ class UserService(
 
                     withContext(Dispatchers.IO) {
                         val file = File(filePath)
-                        file.parentFile.mkdirs() // pastikan folder ada
+                        file.parentFile.mkdirs()
 
                         part.provider().copyAndClose(file.writeChannel())
                         newPhoto = filePath
                     }
                 }
-
                 else -> {}
             }
-
             part.dispose()
         }
 
@@ -124,13 +121,13 @@ class UserService(
         }
 
         val newFile = File(newPhoto)
-        // Cek apakah gambar berhasil diunggah
         if (!newFile.exists()) {
             throw AppException(404, "Photo profile gagal diunggah!")
         }
 
         val oldPhoto = user.photo
         user.photo = newPhoto
+        user.updatedAt = Clock.System.now()
 
         val isUpdated = userRepo.update(
             user.id,
@@ -140,7 +137,6 @@ class UserService(
             throw AppException(400, "Gagal memperbarui photo profile!")
         }
 
-        // Hapus photo profile lama
         if(oldPhoto != null){
             val oldFile = File(oldPhoto)
             if(oldFile.exists()){
@@ -156,14 +152,11 @@ class UserService(
         call.respond(response)
     }
 
-    // Mengubah data saya
     suspend fun putMyPassword(call: ApplicationCall) {
         val user = ServiceHelper.getAuthUser(call, userRepo)
 
-        // Ambil data request
         val request = call.receive<AuthRequest>()
 
-        // Validasi request
         val validator = ValidatorHelper(request.toMap())
         validator.required("newPassword", "Kata sandi baru tidak boleh kosong")
         validator.required("password", "Kata sandi lama tidak boleh kosong")
@@ -174,8 +167,9 @@ class UserService(
             throw AppException(404, "Kata sandi lama tidak valid!")
         }
 
-        // buat password baru
         user.password = hashPassword(request.newPassword)
+        user.updatedAt = Clock.System.now()
+
         val isUpdated = userRepo.update(
             user.id,
             user
@@ -184,7 +178,6 @@ class UserService(
             throw AppException(400, "Gagal mengubah kata sandi!")
         }
 
-        // Hapus semua token
         refreshTokenRepo.deleteByUserId(user.id)
 
         val response = DataResponse(
@@ -195,7 +188,6 @@ class UserService(
         call.respond(response)
     }
 
-    // Mengambil photo
     suspend fun getPhoto(call: ApplicationCall) {
         val userId = call.parameters["id"]
             ?: throw AppException(400, "Data todo tidak valid!")
